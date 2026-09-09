@@ -1,0 +1,6 @@
+# dsh-subagent-reaper bundle patch：把插件行插入组合。
+# 安装：dsh plugin --profile desktop add github:belldandy114/dsh-subagent-reaper
+# 本地开发：dsh plugin --profile desktop add link:<本目录绝对路径>
+- insert:
+    - id: subagent-reaper
+      name: dsh-subagent-reaper
