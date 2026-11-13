@@ -2,7 +2,7 @@
 
 DSH 会话页头的**子代理回收器**：一键列出当前会话的子代理，点行尾的 ✕ 回收它（连同其会话数据）。
 
-![version](https://img.shields.io/badge/version-0.2.0-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![version](https://img.shields.io/badge/version-0.2.1-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## 为什么需要
 
@@ -76,7 +76,8 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
 
 ## 安全
 
-- 路由需要 index 注入的随机 token（`x-reaper-token`，每次启动新生成），页面外的请求拿不到
+- 路由鉴权走官方 `connection.requestRejection({ headers })`：已认证的同源页面（含桌面版 `dsh-app://` 转发）直接放行，未认证的外部请求一律 403
+- 兼容旧路径：`connection` 服务不可用时退回 index 注入的随机 token（`x-reaper-token`，每次启动新生成）
 - 只允许回收**子代理会话**；id 必须是 UUID；运行中的一律拒绝
 - 删除**不可逆**，且只删主会话库（`$DSH_HOME/sessions/…`）；导出到项目目录的会话副本不受影响
 
@@ -108,6 +109,7 @@ lib/client.js        Client 半：window.__ModuleLoader__.load(...)，页头纯�
 - **0.2.0**：面板从 `position: absolute` 改为 `position: fixed` + 由按钮矩形算坐标。页头祖先（`*_root` / `*_centerCol` / `*_frame`）都是 `overflow: hidden`，absolute 面板会被裁掉左半边（实测 440px 只剩 339px 可见）。
 - **0.2.0**：页签切换时立即重新拉取（此前只切 `scope` 不刷新，切到「全部会话」仍显示旧数据）。
 - **0.2.0**：新增「已回收」名单（见上），解决「删了还在列表里」与「从未落盘的子代理删不掉」两个问题；新增 `/reaped`、`/unreap` 两条路由与面板撤销入口。
+- **0.2.1**：**修掉桌面版「读取失败：HTTP 403」**。桌面版窗口走 `dsh-app://app/` 协议转发，转发时会剥掉 `cookie` / `origin` / `host` / `sec-fetch-site` 再注入 Host 自己的 cookie，页面里那份 `<meta name="subagent-reaper-token">` 与 Host 进程当前 token 可能不同步，于是只认 token 的守卫把合法请求也拒了。现在守卫首选官方 `connection.requestRejection({ headers })`（Host/Origin fence + 签名 cookie 校验），未认证的外部请求仍返回 403，token 只作为 `connection` 不可用时的回退。
 
 ## License
 
