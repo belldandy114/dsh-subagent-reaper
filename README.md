@@ -2,7 +2,7 @@
 
 DSH 会话页头的**子代理回收器**：一键列出当前会话的子代理，点行尾的 ✕ 回收它（连同其会话数据）。
 
-![version](https://img.shields.io/badge/version-0.2.1-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![version](https://img.shields.io/badge/version-0.2.3-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## 为什么需要
 
@@ -73,6 +73,7 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
 - 回收成功后把 id 记进去，列表时过滤掉，用户看到的结果与实际删除一致
 - 对「无产物但已不在 live 注册表」的目标也算回收成功（面板会注明「该子代理从未落盘，仅摘除并标记」）
 - 名单可撤销（`POST /unreap`），撤销后该行重新出现
+- 名单可整块清空（`POST /clear-reaped`），面板「已回收」标题行右侧的「清空」按钮就是它；清空只影响隐藏名单，已删除的数据不会回来
 
 ## 安全
 
@@ -86,7 +87,7 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
 ```
 package.json         dsh.bundle.patch + dsh.client.platform=web
 cordis.patch.yml     把插件行插入组合
-lib/index.js         Host 半：7 条同源 HTTP 路由（list / all / purge / purge-idle / reaped / unreap / diag）+ token 注入
+lib/index.js         Host 半：8 条同源 HTTP 路由（list / all / purge / purge-idle / reaped / unreap / clear-reaped / diag）+ token 注入
 lib/client.js        Client 半：window.__ModuleLoader__.load(...)，页头纯图标按钮 + 面板
 ```
 
@@ -110,6 +111,11 @@ lib/client.js        Client 半：window.__ModuleLoader__.load(...)，页头纯�
 - **0.2.0**：页签切换时立即重新拉取（此前只切 `scope` 不刷新，切到「全部会话」仍显示旧数据）。
 - **0.2.0**：新增「已回收」名单（见上），解决「删了还在列表里」与「从未落盘的子代理删不掉」两个问题；新增 `/reaped`、`/unreap` 两条路由与面板撤销入口。
 - **0.2.1**：**修掉桌面版「读取失败：HTTP 403」**。桌面版窗口走 `dsh-app://app/` 协议转发，转发时会剥掉 `cookie` / `origin` / `host` / `sec-fetch-site` 再注入 Host 自己的 cookie，页面里那份 `<meta name="subagent-reaper-token">` 与 Host 进程当前 token 可能不同步，于是只认 token 的守卫把合法请求也拒了。现在守卫首选官方 `connection.requestRejection({ headers })`（Host/Origin fence + 签名 cookie 校验），未认证的外部请求仍返回 403，token 只作为 `connection` 不可用时的回退。
+- **0.2.2**：**面板里的 UUID 换成会话名称**。Host 半新增 `readTitles(ids)`：优先 `sessionQuery.readTitleSnapshots(ids)`（一次批量、保留输入顺序、单条失败隔离），回退逐条 `sessionQuery.readTitle(id)`；`/list` 与 `/all` 的每一行都带 `title`，`/all` 的分组还带 `parentTitle`。Client 半显示优先级：**会话标题 → catalog `label` → UUID 前 20 位**，`title` 属性仍保留完整 UUID 便于核对。
+- **0.2.2**：**删除后侧栏计数真正减一**。此前只调 `sessions.refreshProjections(parentId)`，而它在 `projectionLoads.get(id).state === 'ready'` 时**直接 resolve 不重拉**（asar 偏移 22650914），所以侧栏（按 `byId` 里 `origin === 'subagent' && parentId` 计数）不会变。现在 `syncClientState` 同时调 `sessions.refresh()`（= `manager.refreshList()`，走 `mergeOrderedBaseline`，宿主不再列出的会话会从 `byId` 消失）与 `refreshProjections(parentId)`，各两轮。
+- **0.2.2**：**页头谱系仍会保留一行，这是 DSH 的设计**。`conversation.session.header.lineage` 的计数来自父会话日志里的 `subagent/catalog` 事件，该投影是 `appendChunkedList` 只追加，官方没有移除事件（`catalog-removed` / `subagent/retire` 在 asar 里命中数为 0），`sessionProjections` / `sessionProjectionCache` 也没有删除行的接口。插件无权改写父会话日志，因此面板底部如实说明：「删除后侧栏计数会同步刷新；页头谱系来自父会话日志（只追加），仍会保留一行」。
+- **0.2.2**：`forgetProjection` 修正。0.2.2-rc.2 的 `sessionProjectionCache` 只有 `cachedSnapshot` / `cachedPredecessorTitle` / `hydratePrepared` / `write` / `coldSnapshot`，**没有 `requireTable`**；原实现调 `cache.requireTable().delete(id)` 会静默失败。现在只做能力探测（有 `forget` 才调），拿不到就跳过。
+- **0.2.3**：**「已回收」那一栏可以整块删掉**。新增 `POST /subagent-reaper/clear-reaped`（Host 半 `clearReaped()` 把名单文件写成空数组），面板标题行右侧加「清空」按钮；每个 id 芯片也从「点一下撤销」改成「芯片 + ✕」，避免误触。清空只影响隐藏名单，已删除的会话数据不会回来。
 
 ## License
 
