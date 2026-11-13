@@ -2,7 +2,7 @@
 
 DSH 会话页头的**子代理回收器**：一键列出当前会话的子代理，点行尾的 ✕ 回收它（连同其会话数据）。
 
-![version](https://img.shields.io/badge/version-0.2.3-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![version](https://img.shields.io/badge/version-0.2.4-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## 为什么需要
 
@@ -43,7 +43,7 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
   - **全部会话**：所有会话遗留的子代理，按父会话分组
 - 点行尾 **✕** → 回收该子代理（含其全部后代）
 - 底部「清理全部空闲」→ 批量回收（运行中的自动跳过）
-- 底部「已回收 N 个（可撤销）」→ 点 id 芯片可撤销回收标记，让该行重新出现
+- 底部「已回收 N 个」→ 记录已回收的 id（这些行保持隐藏）；点芯片上的 ✕ 或右侧「清空」只是**删掉这条记录**，不会恢复子代理
 
 ## 回收机制
 
@@ -72,8 +72,8 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
 
 - 回收成功后把 id 记进去，列表时过滤掉，用户看到的结果与实际删除一致
 - 对「无产物但已不在 live 注册表」的目标也算回收成功（面板会注明「该子代理从未落盘，仅摘除并标记」）
-- 名单可撤销（`POST /unreap`），撤销后该行重新出现
-- 名单可整块清空（`POST /clear-reaped`），面板「已回收」标题行右侧的「清空」按钮就是它；清空只影响隐藏名单，已删除的数据不会回来
+- 名单里的条目可以逐条删（`POST /dismiss`）或整块清空（`POST /clear-reaped`）。**删条目 ≠ 恢复**：行仍然隐藏，只是不再占面板位置
+- 需要真正恢复可见性时用 `POST /unreap`（面板不再暴露这个入口，避免误触）
 
 ## 安全
 
@@ -87,7 +87,7 @@ dsh plugin --profile desktop remove dsh-subagent-reaper
 ```
 package.json         dsh.bundle.patch + dsh.client.platform=web
 cordis.patch.yml     把插件行插入组合
-lib/index.js         Host 半：8 条同源 HTTP 路由（list / all / purge / purge-idle / reaped / unreap / clear-reaped / diag）+ token 注入
+lib/index.js         Host 半：9 条同源 HTTP 路由（list / all / purge / purge-idle / reaped / dismiss / unreap / clear-reaped / diag）+ token 注入
 lib/client.js        Client 半：window.__ModuleLoader__.load(...)，页头纯图标按钮 + 面板
 ```
 
@@ -116,6 +116,9 @@ lib/client.js        Client 半：window.__ModuleLoader__.load(...)，页头纯�
 - **0.2.2**：**页头谱系仍会保留一行，这是 DSH 的设计**。`conversation.session.header.lineage` 的计数来自父会话日志里的 `subagent/catalog` 事件，该投影是 `appendChunkedList` 只追加，官方没有移除事件（`catalog-removed` / `subagent/retire` 在 asar 里命中数为 0），`sessionProjections` / `sessionProjectionCache` 也没有删除行的接口。插件无权改写父会话日志，因此面板底部如实说明：「删除后侧栏计数会同步刷新；页头谱系来自父会话日志（只追加），仍会保留一行」。
 - **0.2.2**：`forgetProjection` 修正。0.2.2-rc.2 的 `sessionProjectionCache` 只有 `cachedSnapshot` / `cachedPredecessorTitle` / `hydratePrepared` / `write` / `coldSnapshot`，**没有 `requireTable`**；原实现调 `cache.requireTable().delete(id)` 会静默失败。现在只做能力探测（有 `forget` 才调），拿不到就跳过。
 - **0.2.3**：**「已回收」那一栏可以整块删掉**。新增 `POST /subagent-reaper/clear-reaped`（Host 半 `clearReaped()` 把名单文件写成空数组），面板标题行右侧加「清空」按钮；每个 id 芯片也从「点一下撤销」改成「芯片 + ✕」，避免误触。清空只影响隐藏名单，已删除的会话数据不会回来。
+- **0.2.4**：**页头「N 个子智能体」现在会跟着变**。此前它读的是客户端 `projectionStores[parentId].values().subagentCatalog`（`ClientSessions.buildListSnapshot` / `projectList` 都从这里取），而父会话日志里的 `subagent/catalog` 是只追加的，删完文件计数不动。现在 Client 半新增 `patchCatalog(hiddenIds)`：拿到 `sessions.manager.projectionStores`，对每个 store 用 `store.apply('subagentCatalog', 过滤后的数组, seqOf+1)` 覆盖，再 `manager.notifier.markDirty()` 触发 `projectList()`。Host 数据不受影响，每次 `refresh()` 都会重新施加。
+- **0.2.4**：**「已回收」栏改成删除语义**。芯片上的 ✕ 与「清空」现在调 `POST /dismiss` / `POST /clear-reaped`，只把条目从面板记录里删掉，**不会**让子代理重新出现（`/unreap` 仍保留在 API 里，但面板不再暴露）。名单文件升级为 `{version:2, ids, dismissed}`：`ids` 是隐藏名单，`dismissed` 是「已从面板删掉但仍隐藏」的条目。
+- **0.2.4**：**面板紧凑化**。宽度 440 → 380，行内边距 6/8 → 3/6，页签与底部间距减半，行高 24 → 22，底部提示从两行长文案压成一句「删除后页头与侧栏计数会同步刷新」。
 
 ## License
 
