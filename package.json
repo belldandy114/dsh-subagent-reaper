@@ -1,7 +1,7 @@
 {
   "name": "dsh-subagent-reaper",
-  "version": "0.1.3",
-  "description": "子代理回收器：会话页头一键列出并删除一次性子代理（含其会话数据）",
+  "version": "0.2.0",
+  "description": "子代理回收器：会话页头一键列出并回收子代理（含其会话数据）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
